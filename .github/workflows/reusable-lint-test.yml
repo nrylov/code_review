@@ -35,12 +35,12 @@ on:
       install-command:
         description: Command to install project + dev dependencies
         type: string
-        default: 'pip install -e ".[dev]"'
+        default: 'uv sync --dev'
 
       lint-command:
         description: Lint command to run
         type: string
-        default: 'ruff check . && ruff format --check .'
+        default: 'uv run ruff check . && uv run ruff format --check .'
 
       type-check:
         description: Run mypy type checking after linting
@@ -50,7 +50,7 @@ on:
       test-command:
         description: Test command to run
         type: string
-        default: 'pytest --tb=short'
+        default: 'uv run pytest --tb=short'
 
       upload-coverage:
         description: Upload coverage report as an artifact
@@ -73,14 +73,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python-version }}
-          cache: pip
 
-      - name: Install ruff
-        run: pip install ruff
-
-      - name: Install mypy (if type-check enabled)
-        if: inputs.type-check
-        run: pip install mypy
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Install project dependencies (for mypy stubs)
         if: inputs.type-check
@@ -91,7 +86,7 @@ jobs:
 
       - name: mypy type check
         if: inputs.type-check
-        run: mypy .
+        run: uv run mypy .
 
   test:
     name: Test
@@ -108,13 +103,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python-version }}
-          cache: pip
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
         run: ${{ inputs.install-command }}
-
-      - name: Install pytest + coverage
-        run: pip install pytest pytest-cov
 
       - name: Run tests
         run: ${{ inputs.test-command }}
