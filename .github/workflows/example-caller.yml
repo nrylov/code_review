@@ -54,11 +54,11 @@ jobs:
       install-command: 'uv sync --dev'
 
       # ── Lint ────────────────────────────────────────────────────────────────
-      lint-command: 'uv run ruff check . && uv run ruff format --check .'
+      lint-command: 'uvx ruff check . && uvx ruff format --check .'
       type-check: false    # set to true to enable mypy
 
       # ── Tests ───────────────────────────────────────────────────────────────
-      test-command: 'uv run pytest --tb=short'
+      test-command: 'uv run --with pytest pytest --tb=short'
       upload-coverage: false
 
   ai-review:
