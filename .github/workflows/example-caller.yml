@@ -1,0 +1,80 @@
+# TEMPLATE: Copy this file into .github/workflows/ci.yml in any repo you want to test.
+#
+# Replace YOUR_GITHUB_USERNAME with your actual GitHub username.
+#
+# SETUP CHECKLIST for the target repo:
+#   1. Add secret ANTHROPIC_API_KEY (Settings → Secrets → Actions)
+#   2. If using self-hosted runners: install + register the runner first (see docs/runner-options.md)
+#   3. Push this file to .github/workflows/ci.yml and open a PR to test it
+
+name: PR CI
+
+on:
+  pull_request:
+    branches: [main, master]
+
+# Required for the AI review to post PR comments
+permissions:
+  pull-requests: write
+  contents: read
+
+# ─── Runner selection ──────────────────────────────────────────────────────────
+# Pick ONE of the three options below and delete the others.
+#
+# Option A — GitHub-hosted (no setup needed, billed per minute):
+#   runner: '"ubuntu-latest"'
+#
+# Option B — Self-hosted on your Ubuntu VPS (free, runs on your machine):
+#   runner: '["self-hosted","linux"]'
+#   Prerequisite: see docs/runner-options.md → "Self-hosted VPS setup"
+#
+# Option C — Self-hosted on K8s via ARC (scales automatically, runs on your cluster):
+#   runner: '["self-hosted","linux","k8s"]'   # replace "k8s" with your runner-set name
+#   Prerequisite: see docs/runner-options.md → "K8s ARC setup"
+# ──────────────────────────────────────────────────────────────────────────────
+
+env:
+  # Change this to match the option you chose above
+  RUNNER: '"ubuntu-latest"'
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    uses: nrylov/code_review/.github/workflows/reusable-lint-test.yml@main
+    with:
+      # ── Runner ──────────────────────────────────────────────────────────────
+      runs-on: '"ubuntu-latest"'          # Option A (GitHub-hosted)
+      # runs-on: '["self-hosted","linux"]'  # Option B (VPS)
+      # runs-on: '["self-hosted","linux","k8s"]'  # Option C (K8s ARC)
+
+      # ── Python ──────────────────────────────────────────────────────────────
+      python-version: '3.12'
+
+      # ── Install command — adjust to your project layout ─────────────────────
+      # If you have pyproject.toml with a [dev] extra:
+      install-command: 'pip install -e ".[dev]"'
+      # If you have requirements files:
+      # install-command: 'pip install -r requirements.txt -r requirements-dev.txt'
+      # If you have nothing yet:
+      # install-command: 'pip install pytest ruff'
+
+      # ── Lint ────────────────────────────────────────────────────────────────
+      lint-command: 'ruff check . && ruff format --check .'
+      type-check: false    # set to true to enable mypy
+
+      # ── Tests ───────────────────────────────────────────────────────────────
+      test-command: 'pytest --tb=short'
+      upload-coverage: false
+
+  ai-review:
+    name: AI Review
+    uses: nrylov/code_review/.github/workflows/reusable-ai-review.yml@main
+    with:
+      runs-on: '"ubuntu-latest"'          # Option A (GitHub-hosted)
+      # runs-on: '["self-hosted","linux"]'  # Option B (VPS)
+      # runs-on: '["self-hosted","linux","k8s"]'  # Option C (K8s ARC)
+
+      model: 'claude-sonnet-4-6'
+      max-diff-bytes: 50000
+    secrets:
+      anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
