@@ -51,19 +51,14 @@ jobs:
       python-version: '3.12'
 
       # ── Install command — adjust to your project layout ─────────────────────
-      # If you have pyproject.toml with a [dev] extra:
-      install-command: 'pip install -e ".[dev]"'
-      # If you have requirements files:
-      # install-command: 'pip install -r requirements.txt -r requirements-dev.txt'
-      # If you have nothing yet:
-      # install-command: 'pip install pytest ruff'
+      install-command: 'uv sync --dev'
 
       # ── Lint ────────────────────────────────────────────────────────────────
-      lint-command: 'ruff check . && ruff format --check .'
+      lint-command: 'uv run ruff check . && uv run ruff format --check .'
       type-check: false    # set to true to enable mypy
 
       # ── Tests ───────────────────────────────────────────────────────────────
-      test-command: 'pytest --tb=short'
+      test-command: 'uv run pytest --tb=short'
       upload-coverage: false
 
   ai-review:
