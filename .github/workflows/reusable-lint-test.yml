@@ -1,0 +1,129 @@
+# Reusable workflow: Python lint (ruff + optional mypy) and test (pytest)
+#
+# Called from other repos via:
+#   uses: YOUR_GITHUB_USERNAME/code_review/.github/workflows/reusable-lint-test.yml@main
+#
+# Runner selection — pass runs-on as a JSON-encoded string:
+#   GitHub-hosted : '"ubuntu-latest"'
+#   Self-hosted VPS: '["self-hosted","linux"]'
+#   K8s ARC runner: '["self-hosted","linux","k8s"]'  (replace "k8s" with your runner set name)
+
+name: Reusable · Python Lint & Test
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: Python version to use
+        type: string
+        default: '3.12'
+
+      runs-on:
+        description: |
+          Runner label(s) as a JSON-encoded value. Examples:
+            '"ubuntu-latest"'              → GitHub-hosted
+            '["self-hosted","linux"]'      → Self-hosted VPS
+            '["self-hosted","linux","k8s"]'→ K8s ARC (replace k8s with runner set name)
+        type: string
+        default: '"ubuntu-latest"'
+
+      working-directory:
+        description: Directory containing the Python project (relative to repo root)
+        type: string
+        default: '.'
+
+      install-command:
+        description: Command to install project + dev dependencies
+        type: string
+        default: 'pip install -e ".[dev]"'
+
+      lint-command:
+        description: Lint command to run
+        type: string
+        default: 'ruff check . && ruff format --check .'
+
+      type-check:
+        description: Run mypy type checking after linting
+        type: boolean
+        default: false
+
+      test-command:
+        description: Test command to run
+        type: string
+        default: 'pytest --tb=short'
+
+      upload-coverage:
+        description: Upload coverage report as an artifact
+        type: boolean
+        default: false
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ${{ fromJson(inputs.runs-on) }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ inputs.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Install mypy (if type-check enabled)
+        if: inputs.type-check
+        run: pip install mypy
+
+      - name: Install project dependencies (for mypy stubs)
+        if: inputs.type-check
+        run: ${{ inputs.install-command }}
+
+      - name: Ruff lint
+        run: ${{ inputs.lint-command }}
+
+      - name: mypy type check
+        if: inputs.type-check
+        run: mypy .
+
+  test:
+    name: Test
+    runs-on: ${{ fromJson(inputs.runs-on) }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ inputs.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Install pytest + coverage
+        run: pip install pytest pytest-cov
+
+      - name: Run tests
+        run: ${{ inputs.test-command }}
+
+      - name: Upload coverage report
+        if: inputs.upload-coverage && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: ${{ inputs.working-directory }}/htmlcov/
+          if-no-files-found: ignore
+          retention-days: 7

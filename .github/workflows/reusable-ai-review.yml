@@ -1,0 +1,136 @@
+# Reusable workflow: AI-powered PR code review via Claude
+#
+# Called from other repos via:
+#   uses: YOUR_GITHUB_USERNAME/code_review/.github/workflows/reusable-ai-review.yml@main
+#
+# Requirements in the calling repo:
+#   1. Add ANTHROPIC_API_KEY to the repo/org secrets
+#   2. Grant permissions: pull-requests: write, contents: read
+#
+# The workflow posts a single review comment per PR push.
+# On re-push, the previous bot comment is replaced with a fresh review.
+
+name: Reusable · AI PR Review
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: |
+          Runner label(s) as a JSON-encoded value. Examples:
+            '"ubuntu-latest"'              → GitHub-hosted
+            '["self-hosted","linux"]'      → Self-hosted VPS
+            '["self-hosted","linux","k8s"]'→ K8s ARC
+        type: string
+        default: '"ubuntu-latest"'
+
+      max-diff-bytes:
+        description: Truncate the PR diff at this many bytes to avoid exceeding context limits
+        type: number
+        default: 50000
+
+      model:
+        description: Claude model ID to use for the review
+        type: string
+        default: 'claude-sonnet-4-6'
+
+    secrets:
+      anthropic-api-key:
+        description: Anthropic API key
+        required: true
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  ai-review:
+    name: AI Code Review
+    runs-on: ${{ fromJson(inputs.runs-on) }}
+    # Only run on pull_request events (skip pushes to main, etc.)
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download ai_review.py from hub repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Download the review script from this (hub) repo
+          curl -fsSL \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.raw" \
+            "https://api.github.com/repos/${{ github.repository_owner }}/code_review/contents/scripts/ai_review.py?ref=main" \
+            -o /tmp/ai_review.py
+
+      - name: Fetch PR diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr diff ${{ github.event.pull_request.number }} \
+            --repo "${{ github.repository }}" \
+            > /tmp/pr.diff
+          # Truncate if too large
+          python3 -c "
+          import os
+          max_bytes = ${{ inputs.max-diff-bytes }}
+          with open('/tmp/pr.diff', 'rb') as f:
+              data = f.read(max_bytes)
+          truncated = os.path.getsize('/tmp/pr.diff') > max_bytes
+          with open('/tmp/pr.diff', 'wb') as f:
+              f.write(data)
+              if truncated:
+                  f.write(b'\n\n[... diff truncated to first %d bytes ...]\n' % max_bytes)
+          "
+          echo "Diff size: $(wc -c < /tmp/pr.diff) bytes"
+
+      - name: Run AI review
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.anthropic-api-key }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          MODEL: ${{ inputs.model }}
+        run: |
+          python3 /tmp/ai_review.py < /tmp/pr.diff > /tmp/review.md
+          echo "Review written to /tmp/review.md ($(wc -c < /tmp/review.md) bytes)"
+
+      - name: Delete previous bot review comment (if any)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Find and delete any existing AI review comment from this bot
+          EXISTING=$(gh api \
+            "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- ai-review -->"))) | .id' \
+            | head -1)
+          if [ -n "$EXISTING" ]; then
+            echo "Deleting previous review comment $EXISTING"
+            gh api -X DELETE "repos/${{ github.repository }}/issues/comments/$EXISTING"
+          fi
+
+      - name: Post review comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REVIEW=$(cat /tmp/review.md)
+          BODY="<!-- ai-review -->
+          ## AI Code Review
+
+          $REVIEW
+
+          ---
+          *Reviewed by Claude \`${{ inputs.model }}\` · [code_review hub](https://github.com/${{ github.repository_owner }}/code_review)*"
+
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo "${{ github.repository }}" \
+            --body "$BODY"
