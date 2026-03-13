@@ -4,11 +4,23 @@ Central hub for reusable GitHub Actions workflows. Other repositories call these
 
 ## What runs on every PR
 
+### Python
+
 | Check | Tool |
 |---|---|
 | Linting | [ruff](https://docs.astral.sh/ruff/) |
 | Type checking (optional) | [mypy](https://mypy.readthedocs.io/) |
 | Tests | [pytest](https://pytest.org/) |
+| AI code review | Claude (Anthropic) |
+
+### Go
+
+| Check | Tool |
+|---|---|
+| Vet | `go vet` |
+| Linting | [golangci-lint](https://golangci-lint.run/) |
+| Build | `go build ./...` |
+| Tests | `go test` (with `-race`) |
 | AI code review | Claude (Anthropic) |
 
 ## Quick start
@@ -64,9 +76,10 @@ See [docs/runner-options.md](docs/runner-options.md) for setup instructions.
 ```
 .github/
   workflows/
-    reusable-lint-test.yml     # Reusable: ruff, mypy, pytest
-    reusable-ai-review.yml     # Reusable: Claude PR review
-    example-caller.yml         # Template — copy this into target repos
+    reusable-lint-test.yml     # Reusable: Python — ruff, mypy, pytest
+    reusable-go-lint-test.yml  # Reusable: Go — go vet, golangci-lint, go test
+    reusable-ai-review.yml     # Reusable: Claude PR review (language-agnostic)
+    example-caller.yml         # Template — Python caller, copy into target repos
 scripts/
   ai_review.py                 # Claude API call (stdlib only, no pip install)
 docs/
@@ -87,6 +100,17 @@ docs/
 | `type-check` | `false` | Enable mypy |
 | `test-command` | `pytest --tb=short` | Test command |
 | `upload-coverage` | `false` | Upload htmlcov artifact |
+
+### `reusable-go-lint-test.yml`
+
+| Input | Default | Description |
+|---|---|---|
+| `go-version` | `stable` | Go version (`stable`, `1.22`, etc.) |
+| `runs-on` | `'"ubuntu-latest"'` | Runner (JSON-encoded) |
+| `working-directory` | `.` | Directory containing `go.mod` |
+| `lint-args` | `--timeout=5m` | Extra args for `golangci-lint run` |
+| `test-args` | `-v -race -count=1 ./...` | Args for `go test` |
+| `upload-coverage` | `false` | Upload `coverage.out` artifact |
 
 ### `reusable-ai-review.yml`
 

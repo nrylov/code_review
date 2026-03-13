@@ -1,0 +1,110 @@
+# Reusable workflow: Go lint (golangci-lint + go vet) and test (go test)
+#
+# Called from other repos via:
+#   uses: nrylov/code_review/.github/workflows/reusable-go-lint-test.yml@main
+#
+# Runner selection — pass runs-on as a JSON-encoded string:
+#   GitHub-hosted : '"ubuntu-latest"'
+#   Self-hosted VPS: '["self-hosted","linux"]'
+#   K8s ARC runner: '["self-hosted","linux","k8s"]'  (replace "k8s" with your runner set name)
+
+name: Reusable · Go Lint & Test
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        description: Go version to use ('stable', '1.22', etc.)
+        type: string
+        default: 'stable'
+
+      runs-on:
+        description: |
+          Runner label(s) as a JSON-encoded value. Examples:
+            '"ubuntu-latest"'              → GitHub-hosted
+            '["self-hosted","linux"]'      → Self-hosted VPS
+            '["self-hosted","linux","k8s"]'→ K8s ARC (replace k8s with runner set name)
+        type: string
+        default: '"ubuntu-latest"'
+
+      working-directory:
+        description: Directory containing the Go module (relative to repo root)
+        type: string
+        default: '.'
+
+      lint-args:
+        description: Extra arguments forwarded to golangci-lint run
+        type: string
+        default: '--timeout=5m'
+
+      test-args:
+        description: Arguments forwarded to go test (package pattern must be included)
+        type: string
+        default: '-v -race -count=1 ./...'
+
+      upload-coverage:
+        description: Upload coverage profile as an artifact
+        type: boolean
+        default: false
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ${{ fromJson(inputs.runs-on) }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go ${{ inputs.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          args: ${{ inputs.lint-args }}
+
+  test:
+    name: Test
+    runs-on: ${{ fromJson(inputs.runs-on) }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go ${{ inputs.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ${{ inputs.test-args }}
+
+      - name: Upload coverage profile
+        if: inputs.upload-coverage && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: ${{ inputs.working-directory }}/coverage.out
+          if-no-files-found: ignore
+          retention-days: 7

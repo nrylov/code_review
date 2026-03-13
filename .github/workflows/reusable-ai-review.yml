@@ -41,6 +41,7 @@ on:
 
 permissions:
   pull-requests: write
+  issues: write        # needed to delete PR comments (GitHub uses the issues API for PR comments)
   contents: read
 
 jobs:
