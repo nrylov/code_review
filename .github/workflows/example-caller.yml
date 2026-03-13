@@ -16,6 +16,7 @@ on:
 # Required for the AI review to post PR comments
 permissions:
   pull-requests: write
+  issues: write
   contents: read
 
 # ─── Runner selection ──────────────────────────────────────────────────────────

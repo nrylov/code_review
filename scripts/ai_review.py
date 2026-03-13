@@ -60,11 +60,13 @@ Concrete, actionable improvements the author should consider.
 
 
 def call_claude(prompt: str, api_key: str, model: str) -> str:
-    payload = json.dumps({
-        "model": model,
-        "max_tokens": 2048,
-        "messages": [{"role": "user", "content": prompt}],
-    }).encode()
+    payload = json.dumps(
+        {
+            "model": model,
+            "max_tokens": 2048,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+    ).encode()
 
     req = urllib.request.Request(
         "https://api.anthropic.com/v1/messages",
@@ -90,7 +92,9 @@ def call_claude(prompt: str, api_key: str, model: str) -> str:
 def main() -> None:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        print("ERROR: ANTHROPIC_API_KEY environment variable is not set.", file=sys.stderr)
+        print(
+            "ERROR: ANTHROPIC_API_KEY environment variable is not set.", file=sys.stderr
+        )
         sys.exit(1)
 
     model = os.environ.get("MODEL", "claude-sonnet-4-6")
